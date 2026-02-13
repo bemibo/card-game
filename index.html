@@ -1,0 +1,1165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; font-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=()">
+  <title>Karten-Duell</title>
+  <style>
+    :root {
+      --bg: #1b2230;
+      --line: #222a38;
+      --panel: #202735;
+      --edge: #0d1118;
+      --text: #f8f5e6;
+      --muted: #d5dbe8;
+      --card-hidden: #39465e;
+      --card-open: #f7f1d1;
+      --card-frozen: #3b7ea1;
+      --btn: #3b4a65;
+      --btn-close: #7d3b3b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      height: 100dvh;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--text);
+      background:
+        repeating-linear-gradient(120deg, transparent 0 38px, var(--line) 38px 40px),
+        var(--bg);
+      padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom) 12px;
+      overflow: hidden;
+    }
+
+    .app {
+      max-width: 1200px;
+      height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 10px;
+    }
+
+    .title {
+      text-align: center;
+      font-size: clamp(22px, 3.8vw, 36px);
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      margin: 4px 0;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .boards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .board {
+      background: rgba(0, 0, 0, 0.18);
+      border: 2px solid var(--edge);
+      border-radius: 12px;
+      padding: 10px;
+      min-height: 0;
+    }
+
+    .board-header {
+      font-size: clamp(14px, 1.9vw, 18px);
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .card {
+      aspect-ratio: 80 / 90;
+      border: 2px solid var(--edge);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: clamp(16px, 3.1vw, 30px);
+      font-weight: 700;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .card.hidden { background: var(--card-hidden); color: #e8eefc; }
+    .card.open { background: var(--card-open); color: #1a1a1a; }
+    .card.frozen { background: var(--card-frozen); color: #e7f6ff; }
+
+    .frozen-badge {
+      position: absolute;
+      bottom: 6px;
+      right: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      opacity: 0.9;
+    }
+
+    .side {
+      background: var(--panel);
+      border: 2px solid var(--edge);
+      border-radius: 12px;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      min-height: 0;
+    }
+
+    .stacks {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .stack-wrap {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+      min-width: 0;
+    }
+
+    .stack {
+      margin-top: 4px;
+      border: 2px solid var(--edge);
+      border-radius: 8px;
+      aspect-ratio: 80 / 90;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(15px, 2.2vw, 22px);
+      font-weight: 700;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+
+    .stack.deck { background: var(--card-hidden); color: #e8eefc; }
+    .stack.deck.empty { background: #5a5a5a; }
+    .stack.discard, .stack.drawn { background: var(--card-open); color: #1a1a1a; }
+
+    .status-title {
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .turn {
+      font-size: 15px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .status-msg {
+      min-height: 64px;
+      line-height: 1.35;
+      font-size: clamp(13px, 1.7vw, 15px);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 2px solid var(--edge);
+      border-radius: 8px;
+      color: #f0f4ff;
+      background: var(--btn);
+      padding: 8px 10px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 13px;
+      font-weight: 700;
+      touch-action: manipulation;
+    }
+
+    button.close { background: var(--btn-close); color: var(--text); }
+    button:disabled { opacity: 0.5; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(13, 17, 24, 0.82);
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+
+    .modal {
+      width: min(560px, 100%);
+      background: var(--panel);
+      border: 2px solid var(--edge);
+      border-radius: 14px;
+      padding: 16px;
+      color: var(--text);
+    }
+
+    .modal h2 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+
+    .modal p {
+      margin: 0 0 12px;
+      line-height: 1.4;
+    }
+
+    .modal .choices {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .hidden-el { display: none !important; }
+
+    .legal-links {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+      padding-bottom: 2px;
+    }
+
+    .legal-links a {
+      color: var(--muted);
+      text-decoration: underline;
+      margin: 0 6px;
+    }
+
+    .overlay-legal-links {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .overlay-legal-links a {
+      color: var(--muted);
+      text-decoration: underline;
+      margin: 0 6px;
+    }
+
+    @media (max-width: 1024px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr) 240px;
+      }
+      .stacks {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+      }
+      .stack-wrap {
+        font-size: 12px;
+      }
+    }
+
+    @media (max-width: 840px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+      }
+      .boards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .side {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="title">Karten-Duell</div>
+    <div class="layout">
+      <div class="boards">
+        <section class="board">
+          <div class="board-header" id="p1-header"></div>
+          <div class="grid" id="p1-grid"></div>
+        </section>
+        <section class="board">
+          <div class="board-header" id="p2-header"></div>
+          <div class="grid" id="p2-grid"></div>
+        </section>
+      </div>
+
+      <aside class="side">
+        <div class="stacks">
+          <div class="stack-wrap">
+            Deck
+            <div class="stack deck" id="deck"></div>
+          </div>
+          <div class="stack-wrap">
+            Ablage
+            <div class="stack discard" id="discard"></div>
+          </div>
+          <div class="stack-wrap">
+            Gezogen
+            <div class="stack drawn" id="drawn"></div>
+          </div>
+        </div>
+
+        <div class="status-title">Aktion</div>
+        <div class="turn" id="turn"></div>
+        <div class="status-msg" id="status"></div>
+
+        <div class="actions hidden-el" id="close-actions">
+          <button id="btn-end">Aktion beenden</button>
+          <button class="close" id="btn-close">Ich schließe</button>
+        </div>
+
+        <div id="gameover" class="status-msg"></div>
+      </aside>
+    </div>
+    <div class="legal-links">
+      <a href="./impressum.html">Legal Notice</a>
+      <a href="./privacy.html">Privacy</a>
+    </div>
+  </div>
+
+  <div class="overlay" id="mode-overlay">
+    <div class="modal">
+      <h2>Player 1 Mode</h2>
+      <p>Choose whether Player 1 is human or computer.</p>
+      <div class="choices">
+        <button id="mode-human">1 = Human</button>
+        <button id="mode-ai">2 = Computer</button>
+      </div>
+      <div class="overlay-legal-links">
+        <a href="./impressum.html">Legal Notice</a>
+        <a href="./privacy.html">Privacy</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const COLS = 4;
+    const ROWS = 3;
+    const AI_ANIM_DELAY_MS = 900;
+    const AI_MIN_REVEALED_FOR_CLOSE = 8;
+
+    const CardState = {
+      OPEN: "offen",
+      HIDDEN: "verdeckt",
+      FROZEN: "offeneingefroren"
+    };
+
+    const TurnPhase = {
+      REVEAL: "reveal",
+      CHOOSE_DRAW: "choose_draw",
+      CHOOSE_SWAP: "choose_swap",
+      MAYBE_CLOSE: "maybe_close",
+      GAME_OVER: "game_over"
+    };
+
+    function randomChoice(items) {
+      if (!items.length) {
+        return null;
+      }
+      return items[Math.floor(Math.random() * items.length)];
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = array[i];
+        array[i] = array[j];
+        array[j] = tmp;
+      }
+      return array;
+    }
+
+    function bindTap(element, handler) {
+      let lastTouchAt = 0;
+
+      element.addEventListener("pointerup", (event) => {
+        if (event.pointerType === "touch" || event.pointerType === "pen") {
+          event.preventDefault();
+          lastTouchAt = Date.now();
+          handler();
+        }
+      });
+
+      element.addEventListener("click", (event) => {
+        if (Date.now() - lastTouchAt < 450) {
+          event.preventDefault();
+          return;
+        }
+        handler();
+      });
+    }
+
+    class GameState {
+      constructor() {
+        this.players = {
+          1: { grid: this.emptyGrid(), active: true },
+          2: { grid: this.emptyGrid(), active: true }
+        };
+        this.deck = [];
+        this.discard = [];
+        this.currentPlayer = 1;
+      }
+
+      emptyGrid() {
+        const grid = [];
+        for (let r = 0; r < ROWS; r += 1) {
+          const row = [];
+          for (let c = 0; c < COLS; c += 1) {
+            row.push({ value: 0, state: CardState.HIDDEN });
+          }
+          grid.push(row);
+        }
+        return grid;
+      }
+
+      createDeck() {
+        const values = [-2, -1, 0];
+        for (let v = 1; v <= 12; v += 1) {
+          values.push(v);
+        }
+
+        const deck = [];
+        for (const v of values) {
+          for (let i = 0; i < 4; i += 1) {
+            deck.push({ value: v, state: CardState.HIDDEN });
+          }
+        }
+        return deck;
+      }
+
+      initGame() {
+        const deck = this.createDeck();
+        shuffle(deck);
+
+        const first = deck.pop();
+        first.state = CardState.OPEN;
+        this.discard = [first];
+
+        for (const pid of [1, 2]) {
+          const grid = [];
+          for (let r = 0; r < ROWS; r += 1) {
+            const row = [];
+            for (let c = 0; c < COLS; c += 1) {
+              const card = deck.pop();
+              card.state = CardState.HIDDEN;
+              row.push(card);
+            }
+            grid.push(row);
+          }
+          this.players[pid].grid = grid;
+        }
+
+        this.deck = deck;
+        this.currentPlayer = 1;
+      }
+
+      revealCard(player, row, col) {
+        const card = this.players[player].grid[row][col];
+        if (card.state === CardState.HIDDEN) {
+          card.state = CardState.OPEN;
+        }
+      }
+
+      takeFromDeck() {
+        if (!this.deck.length) {
+          throw new Error("Kartenstapel ist leer");
+        }
+        const card = this.deck.pop();
+        card.state = CardState.OPEN;
+        return card;
+      }
+
+      takeFromDiscard() {
+        if (!this.discard.length) {
+          throw new Error("Ablagestapel ist leer");
+        }
+        return this.discard.pop();
+      }
+
+      swapWithGrid(player, row, col, drawn) {
+        const target = this.players[player].grid[row][col];
+        if (target.state === CardState.FROZEN) {
+          throw new Error("Diese Karte ist offeneingefroren und darf nicht getauscht werden");
+        }
+
+        this.players[player].grid[row][col] = { value: drawn.value, state: CardState.OPEN };
+        target.state = CardState.OPEN;
+        return target;
+      }
+
+      applyFreezeRule(player) {
+        const grid = this.players[player].grid;
+        for (let c = 0; c < COLS; c += 1) {
+          const colCards = [];
+          for (let r = 0; r < ROWS; r += 1) {
+            colCards.push(grid[r][c]);
+          }
+
+          const allOpen = colCards.every((card) => card.state === CardState.OPEN);
+          if (!allOpen) {
+            continue;
+          }
+
+          const values = new Set(colCards.map((card) => card.value));
+          if (values.size === 1) {
+            for (let r = 0; r < ROWS; r += 1) {
+              grid[r][c].state = CardState.FROZEN;
+            }
+          }
+        }
+      }
+
+      isEndState() {
+        if (!this.deck.length) {
+          return true;
+        }
+        return (!this.players[1].active) && (!this.players[2].active);
+      }
+
+      revealAll() {
+        for (const pid of [1, 2]) {
+          for (let r = 0; r < ROWS; r += 1) {
+            for (let c = 0; c < COLS; c += 1) {
+              const card = this.players[pid].grid[r][c];
+              if (card.state === CardState.HIDDEN) {
+                card.state = CardState.OPEN;
+              }
+            }
+          }
+        }
+      }
+
+      scorePlayer(player) {
+        let total = 0;
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            const card = this.players[player].grid[r][c];
+            if (card.state === CardState.FROZEN) {
+              continue;
+            }
+            total += card.value;
+          }
+        }
+        return total;
+      }
+    }
+
+    class GameUI {
+      constructor(aiPlayer1) {
+        this.state = new GameState();
+        this.state.initGame();
+
+        this.aiPlayer1 = aiPlayer1;
+        this.phase = TurnPhase.REVEAL;
+        this.revealCounts = { 1: 0, 2: 0 };
+        this.drawnCard = null;
+        this.aiScheduled = false;
+        this.aiAnimating = false;
+
+        this.p1Header = document.getElementById("p1-header");
+        this.p2Header = document.getElementById("p2-header");
+        this.p1Grid = document.getElementById("p1-grid");
+        this.p2Grid = document.getElementById("p2-grid");
+        this.deckEl = document.getElementById("deck");
+        this.discardEl = document.getElementById("discard");
+        this.drawnEl = document.getElementById("drawn");
+        this.turnEl = document.getElementById("turn");
+        this.statusEl = document.getElementById("status");
+        this.gameOverEl = document.getElementById("gameover");
+        this.closeActions = document.getElementById("close-actions");
+
+        bindTap(this.deckEl, () => this.onDeckClick());
+        bindTap(this.discardEl, () => this.onDiscardClick());
+        bindTap(document.getElementById("btn-end"), () => this.onCloseChoice(false));
+        bindTap(document.getElementById("btn-close"), () => this.onCloseChoice(true));
+
+        this.draw();
+      }
+
+      draw() {
+        this.renderBoard(1, this.p1Grid, this.p1Header);
+        this.renderBoard(2, this.p2Grid, this.p2Header);
+        this.renderStacks();
+        this.renderStatus();
+
+        if (!this.aiScheduled && !this.aiAnimating) {
+          this.aiScheduled = true;
+          setTimeout(() => this.maybeRunAITurn(), 120);
+        }
+      }
+
+      renderBoard(player, container, headerEl) {
+        const isActive = this.state.players[player].active ? "aktiv" : "inaktiv";
+        headerEl.textContent = `Spieler ${player} (${isActive})`;
+
+        container.innerHTML = "";
+        const grid = this.state.players[player].grid;
+
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            const card = grid[r][c];
+            const cardEl = document.createElement("button");
+            cardEl.type = "button";
+            cardEl.className = "card";
+
+            if (card.state === CardState.HIDDEN) {
+              cardEl.classList.add("hidden");
+              cardEl.textContent = "?";
+            } else if (card.state === CardState.FROZEN) {
+              cardEl.classList.add("frozen");
+              cardEl.textContent = String(card.value);
+              const badge = document.createElement("span");
+              badge.className = "frozen-badge";
+              badge.textContent = "F";
+              cardEl.appendChild(badge);
+            } else {
+              cardEl.classList.add("open");
+              cardEl.textContent = String(card.value);
+            }
+
+            bindTap(cardEl, () => this.onCardClick(player, r, c));
+            container.appendChild(cardEl);
+          }
+        }
+      }
+
+      renderStacks() {
+        const hasDeck = this.state.deck.length > 0;
+        this.deckEl.classList.toggle("empty", !hasDeck);
+        this.deckEl.textContent = hasDeck ? "?" : "leer";
+
+        if (this.state.discard.length) {
+          this.discardEl.textContent = String(this.state.discard[this.state.discard.length - 1].value);
+        } else {
+          this.discardEl.textContent = "-";
+        }
+
+        this.drawnEl.textContent = this.drawnCard ? String(this.drawnCard.value) : "-";
+      }
+
+      renderStatus() {
+        this.gameOverEl.textContent = "";
+        const msg = this.statusMessage();
+
+        if (this.phase !== TurnPhase.GAME_OVER) {
+          this.turnEl.textContent = `Am Zug: Spieler ${this.state.currentPlayer}`;
+          this.statusEl.textContent = msg;
+          this.closeActions.classList.toggle("hidden-el", this.phase !== TurnPhase.MAYBE_CLOSE);
+        } else {
+          this.turnEl.textContent = "";
+          this.statusEl.textContent = "";
+          this.closeActions.classList.add("hidden-el");
+          this.renderGameOver();
+        }
+      }
+
+      renderGameOver() {
+        const p1 = this.state.scorePlayer(1);
+        const p2 = this.state.scorePlayer(2);
+        let winner = "Unentschieden";
+        if (p1 < p2) {
+          winner = "Spieler 1";
+        } else if (p2 < p1) {
+          winner = "Spieler 2";
+        }
+        this.gameOverEl.textContent = `Spiel beendet\nP1: ${p1} Punkte\nP2: ${p2} Punkte\nGewinner: ${winner}`;
+      }
+
+      statusMessage() {
+        if (this.phase === TurnPhase.REVEAL) {
+          const count = this.revealCounts[this.state.currentPlayer];
+          return `Spieler ${this.state.currentPlayer}: Bitte 3 Karten aufdecken (${count}/3).`;
+        }
+        if (this.phase === TurnPhase.CHOOSE_DRAW) {
+          return "Wähle: Karte vom Deck ziehen (Deck anklicken) oder oberste Ablage nehmen (Ablage anklicken).";
+        }
+        if (this.phase === TurnPhase.CHOOSE_SWAP) {
+          return "Wähle eine eigene Karte (nicht offeneingefroren) zum Tauschen.";
+        }
+        if (this.phase === TurnPhase.MAYBE_CLOSE) {
+          if (this.state.players[1].active && this.state.players[2].active) {
+            return "Aktion beendet. Du kannst fortfahren oder 'Ich schließe' wählen.";
+          }
+          return "Der andere Spieler ist inaktiv. Du wirst ebenfalls inaktiv.";
+        }
+        if (this.phase === TurnPhase.GAME_OVER) {
+          return "Endzustand erreicht.";
+        }
+        return "";
+      }
+
+      isAITurn() {
+        return this.aiPlayer1 && this.state.currentPlayer === 1 && this.phase !== TurnPhase.GAME_OVER;
+      }
+
+      maybeRunAITurn() {
+        this.aiScheduled = false;
+        if (this.aiAnimating) {
+          return;
+        }
+        if (!this.isAITurn()) {
+          return;
+        }
+
+        if (this.phase === TurnPhase.REVEAL) {
+          this.aiRevealInitialCards();
+          this.draw();
+          return;
+        }
+
+        if (this.phase === TurnPhase.CHOOSE_DRAW) {
+          this.aiExecuteTurn();
+          return;
+        }
+
+        if (this.phase === TurnPhase.MAYBE_CLOSE) {
+          this.onCloseChoice(this.aiShouldClose(1));
+        }
+      }
+
+      aiRevealInitialCards() {
+        const player = 1;
+        const hiddenPositions = [];
+
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            if (this.state.players[player].grid[r][c].state === CardState.HIDDEN) {
+              hiddenPositions.push([r, c]);
+            }
+          }
+        }
+
+        shuffle(hiddenPositions);
+        while (this.revealCounts[player] < 3 && hiddenPositions.length) {
+          const [r, c] = hiddenPositions.pop();
+          this.state.revealCard(player, r, c);
+          this.revealCounts[player] += 1;
+        }
+
+        if (this.revealCounts[player] >= 3) {
+          this.state.currentPlayer = 2;
+        }
+      }
+
+      allNonFrozenPositions(player) {
+        const positions = [];
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            if (this.state.players[player].grid[r][c].state !== CardState.FROZEN) {
+              positions.push([r, c]);
+            }
+          }
+        }
+        return positions;
+      }
+
+      openNonFrozenPositions(player) {
+        const positions = [];
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            if (this.state.players[player].grid[r][c].state === CardState.OPEN) {
+              positions.push([r, c]);
+            }
+          }
+        }
+        return positions;
+      }
+
+      hiddenNonFrozenPositions(player) {
+        const positions = [];
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            if (this.state.players[player].grid[r][c].state === CardState.HIDDEN) {
+              positions.push([r, c]);
+            }
+          }
+        }
+        return positions;
+      }
+
+      aiRule1Target(player, discardValue) {
+        const candidates = [];
+        const grid = this.state.players[player].grid;
+
+        for (let c = 0; c < COLS; c += 1) {
+          const colCards = [];
+          for (let r = 0; r < ROWS; r += 1) {
+            colCards.push(grid[r][c]);
+          }
+
+          let count = 0;
+          for (const card of colCards) {
+            if (card.value === discardValue) {
+              count += 1;
+            }
+          }
+          if (count !== 2) {
+            continue;
+          }
+
+          for (let r = 0; r < ROWS; r += 1) {
+            if (colCards[r].value !== discardValue && colCards[r].state !== CardState.FROZEN) {
+              candidates.push([r, c]);
+            }
+          }
+        }
+
+        return randomChoice(candidates);
+      }
+
+      aiRule2Target(player, valueA) {
+        const positions = this.allNonFrozenPositions(player);
+
+        const higher = positions.filter(([r, c]) => this.state.players[player].grid[r][c].value > valueA);
+        if (higher.length) {
+          let highest = -Infinity;
+          for (const [r, c] of higher) {
+            highest = Math.max(highest, this.state.players[player].grid[r][c].value);
+          }
+          const best = higher.filter(([r, c]) => this.state.players[player].grid[r][c].value === highest);
+          return randomChoice(best);
+        }
+
+        const openPositions = this.openNonFrozenPositions(player);
+        if (!openPositions.length) {
+          return null;
+        }
+
+        let minDiff = Infinity;
+        for (const [r, c] of openPositions) {
+          const diff = Math.abs(this.state.players[player].grid[r][c].value - valueA);
+          minDiff = Math.min(minDiff, diff);
+        }
+
+        const closest = openPositions.filter(([r, c]) => Math.abs(this.state.players[player].grid[r][c].value - valueA) === minDiff);
+        return randomChoice(closest);
+      }
+
+      aiRule3Target(player, drawnValue) {
+        const positions = this.allNonFrozenPositions(player);
+        if (!positions.length) {
+          return null;
+        }
+
+        if (drawnValue >= 5) {
+          let minDiff = Infinity;
+          for (const [r, c] of positions) {
+            const diff = Math.abs(this.state.players[player].grid[r][c].value - drawnValue);
+            minDiff = Math.min(minDiff, diff);
+          }
+          const candidates = positions.filter(([r, c]) => Math.abs(this.state.players[player].grid[r][c].value - drawnValue) === minDiff);
+          return randomChoice(candidates);
+        }
+
+        const higher = positions.filter(([r, c]) => this.state.players[player].grid[r][c].value > drawnValue);
+        if (higher.length) {
+          let highest = -Infinity;
+          for (const [r, c] of higher) {
+            highest = Math.max(highest, this.state.players[player].grid[r][c].value);
+          }
+          const best = higher.filter(([r, c]) => this.state.players[player].grid[r][c].value === highest);
+          return randomChoice(best);
+        }
+
+        let minDiff = Infinity;
+        for (const [r, c] of positions) {
+          const diff = Math.abs(this.state.players[player].grid[r][c].value - drawnValue);
+          minDiff = Math.min(minDiff, diff);
+        }
+
+        const candidates = positions.filter(([r, c]) => Math.abs(this.state.players[player].grid[r][c].value - drawnValue) === minDiff);
+        return randomChoice(candidates);
+      }
+
+      aiEstimatedScore(player) {
+        let total = 0;
+        let hiddenCount = 0;
+        const grid = this.state.players[player].grid;
+
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            const card = grid[r][c];
+            if (card.state === CardState.FROZEN) {
+              continue;
+            }
+            if (card.state === CardState.HIDDEN) {
+              hiddenCount += 1;
+            } else {
+              total += card.value;
+            }
+          }
+        }
+        return total + (5 * hiddenCount);
+      }
+
+      aiRevealedCountForClose(player) {
+        let count = 0;
+        const grid = this.state.players[player].grid;
+
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            if (grid[r][c].state === CardState.OPEN || grid[r][c].state === CardState.FROZEN) {
+              count += 1;
+            }
+          }
+        }
+
+        return count;
+      }
+
+      aiShouldClose(player) {
+        const other = player === 1 ? 2 : 1;
+        if (this.aiRevealedCountForClose(player) < AI_MIN_REVEALED_FOR_CLOSE) {
+          return false;
+        }
+        return this.aiEstimatedScore(player) < this.aiEstimatedScore(other);
+      }
+
+      completeSwapAndTransition(player, row, col) {
+        if (this.drawnCard === null) {
+          return;
+        }
+
+        const swappedOut = this.state.swapWithGrid(player, row, col, this.drawnCard);
+        this.state.discard.push(swappedOut);
+        this.state.applyFreezeRule(player);
+
+        const other = player === 1 ? 2 : 1;
+        if (!this.state.players[other].active) {
+          this.state.players[player].active = false;
+        }
+
+        if (this.state.isEndState()) {
+          this.state.revealAll();
+          this.phase = TurnPhase.GAME_OVER;
+        } else {
+          this.phase = TurnPhase.MAYBE_CLOSE;
+        }
+
+        this.drawnCard = null;
+      }
+
+      aiFinishTurnAfterDraw(target) {
+        const player = 1;
+
+        if (target === null) {
+          if (this.drawnCard !== null) {
+            this.state.discard.push(this.drawnCard);
+            this.drawnCard = null;
+          }
+          this.phase = TurnPhase.MAYBE_CLOSE;
+        } else {
+          this.completeSwapAndTransition(player, target[0], target[1]);
+        }
+
+        this.draw();
+        if (this.phase === TurnPhase.MAYBE_CLOSE) {
+          setTimeout(() => this.aiFinishCloseDecision(), AI_ANIM_DELAY_MS);
+        } else {
+          this.aiAnimating = false;
+        }
+      }
+
+      aiFinishCloseDecision() {
+        if (this.phase !== TurnPhase.MAYBE_CLOSE) {
+          this.aiAnimating = false;
+          this.draw();
+          return;
+        }
+
+        this.aiAnimating = false;
+        this.onCloseChoice(this.aiShouldClose(1));
+      }
+
+      aiExecuteTurn() {
+        const player = 1;
+        if (!this.state.players[player].active) {
+          return;
+        }
+
+        this.aiAnimating = true;
+        const top = this.state.discard.length ? this.state.discard[this.state.discard.length - 1] : null;
+
+        if (top !== null && top.value > 0) {
+          const target = this.aiRule1Target(player, top.value);
+          if (target !== null) {
+            this.drawnCard = this.state.takeFromDiscard();
+            this.draw();
+            setTimeout(() => this.aiFinishTurnAfterDraw(target), AI_ANIM_DELAY_MS);
+            return;
+          }
+        }
+
+        if (top !== null && top.value >= -2 && top.value <= 4) {
+          const target = this.aiRule2Target(player, top.value);
+          if (target !== null) {
+            this.drawnCard = this.state.takeFromDiscard();
+            this.draw();
+            setTimeout(() => this.aiFinishTurnAfterDraw(target), AI_ANIM_DELAY_MS);
+            return;
+          }
+        }
+
+        if (this.state.deck.length) {
+          this.drawnCard = this.state.takeFromDeck();
+          let target = this.aiRule3Target(player, this.drawnCard.value);
+          if (target === null) {
+            const hidden = this.hiddenNonFrozenPositions(player);
+            if (hidden.length) {
+              target = randomChoice(hidden);
+            } else {
+              const opened = this.openNonFrozenPositions(player);
+              if (opened.length) {
+                target = randomChoice(opened);
+              }
+            }
+          }
+
+          this.draw();
+          setTimeout(() => this.aiFinishTurnAfterDraw(target), AI_ANIM_DELAY_MS);
+          return;
+        }
+
+        if (this.state.isEndState()) {
+          this.state.revealAll();
+          this.phase = TurnPhase.GAME_OVER;
+          this.draw();
+          this.aiAnimating = false;
+          return;
+        }
+
+        this.aiAnimating = false;
+      }
+
+      onDeckClick() {
+        if (this.isAITurn()) {
+          return;
+        }
+        if (this.phase === TurnPhase.CHOOSE_DRAW && this.state.deck.length) {
+          this.drawnCard = this.state.takeFromDeck();
+          this.phase = TurnPhase.CHOOSE_SWAP;
+          this.draw();
+        }
+      }
+
+      onDiscardClick() {
+        if (this.isAITurn()) {
+          return;
+        }
+        if (this.phase === TurnPhase.CHOOSE_DRAW && this.state.discard.length) {
+          this.drawnCard = this.state.takeFromDiscard();
+          this.phase = TurnPhase.CHOOSE_SWAP;
+          this.draw();
+        }
+      }
+
+      onCardClick(player, row, col) {
+        if (this.isAITurn()) {
+          return;
+        }
+
+        if (this.phase === TurnPhase.REVEAL) {
+          if (player !== this.state.currentPlayer) {
+            return;
+          }
+
+          const card = this.state.players[player].grid[row][col];
+          if (card.state === CardState.HIDDEN) {
+            this.state.revealCard(player, row, col);
+            this.revealCounts[player] += 1;
+
+            if (this.revealCounts[player] >= 3) {
+              if (this.state.currentPlayer === 1) {
+                this.state.currentPlayer = 2;
+              } else {
+                this.state.currentPlayer = 1;
+                this.phase = TurnPhase.CHOOSE_DRAW;
+              }
+            }
+            this.draw();
+          }
+          return;
+        }
+
+        if (this.phase === TurnPhase.CHOOSE_SWAP) {
+          if (player !== this.state.currentPlayer) {
+            return;
+          }
+          if (this.drawnCard === null) {
+            return;
+          }
+
+          const target = this.state.players[player].grid[row][col];
+          if (target.state === CardState.FROZEN) {
+            return;
+          }
+
+          this.completeSwapAndTransition(player, row, col);
+          this.draw();
+        }
+      }
+
+      onCloseChoice(closePlayer) {
+        if (this.phase !== TurnPhase.MAYBE_CLOSE) {
+          return;
+        }
+
+        const player = this.state.currentPlayer;
+        const other = player === 1 ? 2 : 1;
+
+        if (closePlayer) {
+          this.state.players[player].active = false;
+        }
+
+        if (this.state.isEndState()) {
+          this.state.revealAll();
+          this.phase = TurnPhase.GAME_OVER;
+        } else {
+          this.state.currentPlayer = other;
+          this.phase = TurnPhase.CHOOSE_DRAW;
+        }
+
+        this.draw();
+      }
+    }
+
+    let game = null;
+
+    bindTap(document.getElementById("mode-human"), () => {
+      game = new GameUI(false);
+      document.getElementById("mode-overlay").classList.add("hidden-el");
+    });
+
+    bindTap(document.getElementById("mode-ai"), () => {
+      game = new GameUI(true);
+      document.getElementById("mode-overlay").classList.add("hidden-el");
+    });
+  </script>
+</body>
+</html>
